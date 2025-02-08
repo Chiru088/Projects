@@ -1,0 +1,70 @@
+import cv2
+import mediapipe as mp
+import math
+
+# Initialize Mediapipe Hands
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(max_num_hands=1)
+mp_drawing = mp.solutions.drawing_utils
+
+# Function to calculate the distance between two points
+def calculate_distance(x1, y1, x2, y2):
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+# Conversion factor: Pixels per centimeter (you need to determine this factor)
+pixels_per_cm = 20  # Example value, replace this with your calculated value
+
+# Initialize webcam
+cap = cv2.VideoCapture(0)
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Flip the frame horizontally for a later selfie-view display
+    frame = cv2.flip(frame, 1)
+    # Convert the BGR image to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # Process the image and detect the hands
+    result = hands.process(rgb_frame)
+
+    if result.multi_hand_landmarks:
+        for hand_landmarks in result.multi_hand_landmarks:
+            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+            # Get coordinates of the finger tips
+            finger_tips = [
+                mp_hands.HandLandmark.THUMB_TIP,
+                mp_hands.HandLandmark.INDEX_FINGER_TIP,
+                mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
+                mp_hands.HandLandmark.RING_FINGER_TIP,
+                mp_hands.HandLandmark.PINKY_TIP
+            ]
+
+            tip_coords = []
+            for tip in finger_tips:
+                landmark = hand_landmarks.landmark[tip]
+                h, w, _ = frame.shape
+                x, y = int(landmark.x * w), int(landmark.y * h)
+                tip_coords.append((x, y))
+                # Draw circles on the finger tips
+                cv2.circle(frame, (x, y), 10, (0, 255, 0), -1)
+
+            # Calculate and display the distances between each pair of finger tips
+            for i in range(len(tip_coords)):
+                for j in range(i + 1, len(tip_coords)):
+                    distance_pixels = calculate_distance(tip_coords[i][0], tip_coords[i][1], tip_coords[j][0], tip_coords[j][1])
+                    distance_cm = distance_pixels / pixels_per_cm
+                    mid_x, mid_y = (tip_coords[i][0] + tip_coords[j][0]) // 2, (tip_coords[i][1] + tip_coords[j][1]) // 2
+                    cv2.putText(frame, f'{distance_cm:.2f} cm', (mid_x, mid_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
+
+    # Display the resulting frame
+    cv2.imshow('Hand Distance Measurement', frame)
+
+    # Break the loop if 'q' is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the webcam and close all OpenCV windows
+cap.release()
+cv2.destroyAllWindows()
